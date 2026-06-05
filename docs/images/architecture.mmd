@@ -1,0 +1,69 @@
+%% Adversary — system architecture (export to PNG via scripts/export_mermaid.sh)
+flowchart TB
+    %% ---------- Frontend ----------
+    subgraph FE["Frontend (Next.js 14, SSE client)"]
+      UI["Attack Console<br/>campaign tree · live trace pane · scorecard"]
+    end
+
+    %% ---------- Backend ----------
+    subgraph BE["Backend API (FastAPI on Cloud Run)"]
+      direction TB
+      API["/campaign/stream (SSE)<br/>/report<br/>/report/regression"]
+    end
+
+    %% ---------- Orchestrator ----------
+    subgraph ORCH["Adversary Orchestrator (Google ADK · plain-Python loop)"]
+      direction TB
+      STR["STRATEGIST<br/>Gemini 3 Pro<br/>+ Phoenix MCP toolset"]
+      ATK["ATTACKER<br/>Gemini 3 Flash"]
+      ANL["ANALYST + JUDGE<br/>Gemini 3 Pro<br/>(LLM + refund-ledger ground truth)"]
+      RPT["REPORTER<br/>Gemini 3 Pro"]
+    end
+
+    %% ---------- Target ----------
+    subgraph TGT["TARGET — FriendlyShop support agent"]
+      VLN["build_target_agent()<br/>vulnerable instruction"]
+      PCH["build_patched_agent()<br/>hardened instruction"]
+      TLS["tools: lookup_order · issue_refund · summarize_email<br/>REFUND_LEDGER (ground-truth)"]
+    end
+
+    %% ---------- Observability ----------
+    subgraph OBS["Arize Phoenix"]
+      PHX["Phoenix Cloud<br/>OpenInference spans · evals · experiments"]
+      MCP["Phoenix MCP server<br/>@arizeai/phoenix-mcp (npx subprocess)"]
+    end
+
+    UI -- "GET /campaign/stream" --> API
+    API -- "asyncio.Queue events" --> ORCH
+
+    STR -- "plan / re-plan" --> ATK
+    ATK -- "crafted payload" --> VLN
+    ATK -- "crafted payload" --> PCH
+    VLN --> TLS
+    PCH --> TLS
+    TLS -- "tool spans" --> PHX
+    VLN -- "agent spans" --> PHX
+    PCH -- "agent spans" --> PHX
+    STR -- "agent spans" --> PHX
+    ATK -- "agent spans" --> PHX
+    ANL -- "agent + verdict spans" --> PHX
+
+    VLN -- "final response" --> ANL
+    PCH -- "final response" --> ANL
+    TLS -. "len(REFUND_LEDGER) delta" .-> ANL
+    ANL -- "verdict" --> STR
+    ANL -- "verdict" --> ORCH
+
+    STR -- "list_experiments · query spans · read evals" --> MCP
+    MCP -- "self-introspection results" --> STR
+
+    ORCH -- "scorecard + report" --> RPT
+    RPT -- "reports/<campaign>.md" --> API
+    API -- "SSE events" --> UI
+
+    classDef hot fill:#1f2630,stroke:#b3261e,stroke-width:2px,color:#fff;
+    classDef cool fill:#11151a,stroke:#1f2630,color:#e6e6e6;
+    classDef obs fill:#0f1318,stroke:#5e8bff,color:#e6e6e6;
+    class STR hot;
+    class PHX,MCP obs;
+    class API,UI,ATK,ANL,RPT,VLN,PCH,TLS cool;

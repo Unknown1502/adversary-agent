@@ -1,0 +1,62 @@
+# Cloud Run service descriptor for the Adversary backend.
+#
+# Apply with:
+#   gcloud run services replace deploy/service.yaml --region $GOOGLE_CLOUD_LOCATION
+#
+# This file is the source of truth for runtime config. The deploy.sh
+# wrapper supports a one-shot deploy that infers most of this from env
+# variables; use this YAML when you want declarative GitOps-style
+# rollout (e.g. via Cloud Deploy or Argo).
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: adversary-api
+  annotations:
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        # Keep the service warm during judging. The single-tenant
+        # campaign loop holds significant in-memory state per run; a
+        # cold start in the middle of a demo would be visible.
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/cpu-throttling: "false"
+    spec:
+      containerConcurrency: 4
+      timeoutSeconds: 900
+      serviceAccountName: adversary-runtime@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - image: gcr.io/PROJECT_ID/adversary-api:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          env:
+            - name: GOOGLE_GENAI_USE_VERTEXAI
+              value: "true"
+            - name: GOOGLE_CLOUD_PROJECT
+              value: "PROJECT_ID"
+            - name: GOOGLE_CLOUD_LOCATION
+              value: "us-central1"
+            - name: MODEL_PRO
+              value: "gemini-3-pro"
+            - name: MODEL_FLASH
+              value: "gemini-3-flash"
+            - name: PHOENIX_COLLECTOR_ENDPOINT
+              value: "https://app.phoenix.arize.com"
+            - name: PHOENIX_PROJECT_NAME
+              value: "adversary"
+            - name: MAX_ATTEMPTS_PER_CLASS
+              value: "4"
+            - name: CORS_ALLOW_ORIGINS
+              value: "https://adversary-console.example.com"
+            - name: PHOENIX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: phoenix-api-key
+                  key: latest

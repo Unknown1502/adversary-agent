@@ -1,0 +1,41 @@
+# Files NOT to upload to Cloud Build when running `gcloud run deploy --source .`
+# Without this, every build uploads node_modules + reports + .next, blowing
+# up upload size and risking secrets in .env reaching Cloud Build logs.
+
+# Defer to .gitignore for the common Python / Node noise.
+#!include:.gitignore
+
+# Local-only / never-ship-to-Cloud-Build
+.env
+.env.*
+!.env.example
+
+# Frontend isn't built into the API container.
+frontend/
+*.tsx
+*.ts
+next.config.mjs
+package.json
+package-lock.json
+tsconfig.json
+
+# Tests, docs, scripts that don't run in production.
+tests/
+docs/
+
+# Local artifacts
+reports/*.json
+reports/*.md
+!reports/.gitkeep
+requirements.lock
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Git itself (Cloud Build doesn't need history)
+.git/
+.gitignore
+.github/
