@@ -59,6 +59,26 @@ instance, because each attempt runs against a fresh target session."""
 _GEMINI_RETRY_COUNT: int = 2
 _GEMINI_RETRY_BACKOFF_S: float = 1.5
 
+# Quota (HTTP 429 / RESOURCE_EXHAUSTED) gets its own, far more patient retry.
+# A new/unverified Vertex project has tiny per-minute limits and the window
+# resets on the order of a minute, so we wait long and retry many times — a
+# throttled project then still finishes a full campaign instead of crashing
+# mid-run. Capped so a genuinely dead quota fails eventually rather than hanging.
+_QUOTA_RETRY_COUNT: int = 6
+_QUOTA_BACKOFF_BASE_S: float = 20.0
+_QUOTA_BACKOFF_MAX_S: float = 90.0
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    """True if the exception is a Gemini 429 / RESOURCE_EXHAUSTED throttle."""
+    text = f"{type(exc).__name__} {exc}".lower()
+    return (
+        "429" in text
+        or "resource_exhausted" in text
+        or "resourceexhausted" in text
+        or "quota" in text
+    )
+
 
 class StrategistPlan(TypedDict):
     """Parsed JSON output of the Strategist agent."""
@@ -472,15 +492,31 @@ async def _ask(runner: Any, session_id: str, user_id: str, text: str) -> str:
         Final response text, or "" if the agent produced no final response.
     """
     last_exc: Exception | None = None
-    for attempt in range(_GEMINI_RETRY_COUNT):
+    quota_retries = 0
+    attempt = 0
+    while attempt < _GEMINI_RETRY_COUNT:
         try:
             return await _run_one_turn(runner, session_id, user_id, text)
         except Exception as exc:
             last_exc = exc
+            # Quota throttles get a separate, patient budget and do NOT consume
+            # a normal retry: a 429 is "come back later", not "the call is bad".
+            if _is_quota_error(exc) and quota_retries < _QUOTA_RETRY_COUNT:
+                quota_retries += 1
+                delay = min(
+                    _QUOTA_BACKOFF_BASE_S * quota_retries, _QUOTA_BACKOFF_MAX_S
+                )
+                logger.warning(
+                    "Gemini quota throttle (429); backing off %.0fs "
+                    "(quota retry %d/%d)", delay, quota_retries, _QUOTA_RETRY_COUNT,
+                )
+                await asyncio.sleep(delay)
+                continue
             logger.warning("Agent call failed (attempt %d/%d): %s",
                            attempt + 1, _GEMINI_RETRY_COUNT, exc)
-            if attempt + 1 < _GEMINI_RETRY_COUNT:
-                await asyncio.sleep(_GEMINI_RETRY_BACKOFF_S * (attempt + 1))
+            attempt += 1
+            if attempt < _GEMINI_RETRY_COUNT:
+                await asyncio.sleep(_GEMINI_RETRY_BACKOFF_S * attempt)
     assert last_exc is not None
     raise last_exc
 

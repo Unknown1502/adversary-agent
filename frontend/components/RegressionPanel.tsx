@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import type { Verdict } from "../app/types";
-import { VERDICT_COLOR } from "../app/types";
 
 interface RegressionRow {
   before: Verdict;
@@ -18,9 +17,12 @@ interface RegressionResponse {
 }
 
 interface Props {
-  // Bump this number to re-fetch (e.g. when a patched campaign finishes).
   refreshKey: number;
   apiBase: string;
+}
+
+function pretty(cls: string) {
+  return cls.replace(/_/g, " ");
 }
 
 export default function RegressionPanel({ refreshKey, apiBase }: Props) {
@@ -28,10 +30,9 @@ export default function RegressionPanel({ refreshKey, apiBase }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (refreshKey === 0) return; // nothing to show until at least one run
+    if (refreshKey === 0) return;
     let cancelled = false;
-
-    async function load() {
+    (async () => {
       try {
         const res = await fetch(`${apiBase}/report/regression`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -41,101 +42,109 @@ export default function RegressionPanel({ refreshKey, apiBase }: Props) {
           setError(null);
         }
       } catch (err: unknown) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
-    }
-
-    load();
+    })();
     return () => {
       cancelled = true;
     };
   }, [refreshKey, apiBase]);
 
   if (refreshKey === 0 || data === null) {
-    return null;
+    return (
+      <section className="panel rg">
+        <div className="panel__head">
+          <span className="panel__dot" style={{ background: "var(--violet)", boxShadow: "0 0 10px var(--violet)" }} />
+          <span className="panel__title">Regression Diff</span>
+        </div>
+        <div className="panel__body">
+          <p className="empty">run both targets to compare</p>
+        </div>
+        <Styles />
+      </section>
+    );
   }
 
   const rows = Object.entries(data.diff);
-  const fixedCount = rows.filter(([, r]) => r.fixed).length;
-  const regressedCount = rows.filter(([, r]) => r.regressed).length;
+  const fixed = rows.filter(([, r]) => r.fixed).length;
+  const regressed = rows.filter(([, r]) => r.regressed).length;
   const haveBoth = data.have_vulnerable && data.have_patched;
 
   return (
-    <section
-      style={{
-        marginTop: 12,
-        padding: 12,
-        background: "#11151a",
-        borderRadius: 12,
-        border: "1px solid #1c222a",
-      }}
-    >
-      <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 14, opacity: 0.85 }}>
-        Regression diff{" "}
-        <span style={{ fontSize: 11, opacity: 0.6 }}>
-          {haveBoth ? "vulnerable → patched" : "partial — run both targets"}
+    <section className="panel rg">
+      <div className="panel__head">
+        <span className="panel__dot" style={{ background: "var(--violet)", boxShadow: "0 0 10px var(--violet)" }} />
+        <span className="panel__title">Regression Diff</span>
+        <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-faint)" }}>
+          {haveBoth ? "vuln → patched" : "partial"}
         </span>
-      </h3>
+      </div>
 
-      {error && (
-        <p style={{ color: VERDICT_COLOR.breach, fontSize: 12 }}>{error}</p>
-      )}
+      <div className="panel__body rg__body">
+        {error && <p style={{ color: "var(--breach)", fontSize: 12 }}>{error}</p>}
 
-      {haveBoth && (
-        <div
-          style={{
-            fontSize: 12,
-            opacity: 0.85,
-            marginBottom: 8,
-            display: "flex",
-            gap: 12,
-          }}
-        >
-          <span>
-            fixed:{" "}
-            <b style={{ color: VERDICT_COLOR.blocked }}>{fixedCount}</b>
-          </span>
-          <span>
-            regressed:{" "}
-            <b style={{ color: VERDICT_COLOR.breach }}>{regressedCount}</b>
-          </span>
-        </div>
-      )}
+        {haveBoth && (
+          <div className="rg__summary">
+            <span className="rg__chip rg__chip--ok">fixed {fixed}</span>
+            <span className="rg__chip rg__chip--bad">regressed {regressed}</span>
+          </div>
+        )}
 
-      <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ opacity: 0.6, textAlign: "left" }}>
-            <th style={{ padding: "4px 6px" }}>class</th>
-            <th style={{ padding: "4px 6px" }}>before</th>
-            <th style={{ padding: "4px 6px" }}>after</th>
-            <th style={{ padding: "4px 6px" }}>delta</th>
-          </tr>
-        </thead>
-        <tbody>
+        <div className="rg__rows">
           {rows.map(([cls, r]) => (
-            <tr key={cls} style={{ borderTop: "1px solid #1a1f27" }}>
-              <td style={{ padding: "5px 6px" }}>{cls}</td>
-              <td style={{ padding: "5px 6px", color: VERDICT_COLOR[r.before] }}>
-                {r.before}
-              </td>
-              <td style={{ padding: "5px 6px", color: VERDICT_COLOR[r.after] }}>
-                {r.after}
-              </td>
-              <td style={{ padding: "5px 6px", fontWeight: 600 }}>
+            <div key={cls} className="rg__row">
+              <span className="rg__cls">{pretty(cls)}</span>
+              <span className={`tag tag--${r.before}`}>{r.before}</span>
+              <span className="rg__arrow">→</span>
+              <span className={`tag tag--${r.after}`}>{r.after}</span>
+              <span className="rg__delta">
                 {r.fixed ? (
-                  <span style={{ color: VERDICT_COLOR.blocked }}>FIXED</span>
+                  <span className="rg__d rg__d--fixed">fixed</span>
                 ) : r.regressed ? (
-                  <span style={{ color: VERDICT_COLOR.breach }}>REGRESSED</span>
+                  <span className="rg__d rg__d--reg">regressed</span>
                 ) : (
-                  <span style={{ opacity: 0.5 }}>—</span>
+                  <span className="rg__d rg__d--same">—</span>
                 )}
-              </td>
-            </tr>
+              </span>
+            </div>
           ))}
-        </tbody>
-      </table>
+        </div>
+      </div>
+      <Styles />
     </section>
+  );
+}
+
+function Styles() {
+  return (
+    <style>{`
+      .rg__body { display: flex; flex-direction: column; gap: 10px; }
+      .rg__summary { display: flex; gap: 8px; }
+      .rg__chip {
+        font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+        padding: 4px 9px; border-radius: 99px; border: 1px solid var(--line-bright);
+      }
+      .rg__chip--ok  { color: var(--blocked); border-color: rgba(52,224,161,0.4); }
+      .rg__chip--bad { color: var(--breach); border-color: rgba(255,77,77,0.4); }
+      .rg__rows { display: flex; flex-direction: column; gap: 6px; }
+      .rg__row {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto auto;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 10px;
+        background: var(--bg-2);
+        border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        font-size: 12px;
+      }
+      .rg__cls { text-transform: capitalize; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .rg__arrow { color: var(--fg-faint); font-family: var(--font-mono); }
+      .rg__delta { margin-left: 4px; }
+      .rg__d { font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
+      .rg__d--fixed { color: var(--blocked); background: rgba(52,224,161,0.12); }
+      .rg__d--reg { color: var(--breach); background: rgba(255,77,77,0.14); }
+      .rg__d--same { color: var(--fg-faint); }
+    `}</style>
   );
 }

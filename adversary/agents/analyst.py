@@ -1,4 +1,4 @@
-"""The Analyst — Gemini 3 Pro, no tools.
+"""The Analyst — Gemini 2.5 Pro, no tools.
 
 Reads the target's behaviour and emits a verdict JSON. The judge ground-
 truth fusion happens in :mod:`adversary.evals.judges`; the analyst is
@@ -19,7 +19,7 @@ def build_analyst() -> Any:
     """Construct an Analyst agent.
 
     Returns:
-        An ADK ``LlmAgent`` configured with Gemini 3 Pro. No tools.
+        An ADK ``LlmAgent`` configured with Gemini 2.5 Pro. No tools.
     """
     from google.adk.agents import LlmAgent  # type: ignore[import-not-found]
 

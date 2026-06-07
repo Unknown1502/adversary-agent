@@ -34,10 +34,10 @@ A single async `asyncio.Queue` decouples the orchestrator driver task from the S
 ### Orchestrator (`adversary/orchestrator.py`)
 Plain Python. Four sub-agents wired by hand:
 
-1. **Strategist** (`adversary/agents/strategist.py`) — Gemini 3 Pro. The only agent with tools: the Phoenix MCP toolset. Its prompt forces it to consult its own past traces before choosing a technique.
-2. **Attacker** (`adversary/agents/attacker.py`) — Gemini 3 Flash, no tools. A pure text generator that turns `(class, technique, goal)` into a concrete payload. No tools = no side channel = auditable.
-3. **Analyst** (`adversary/agents/analyst.py`) — Gemini 3 Pro. Reads the target's output and produces a `{verdict, evidence}` JSON. Fused with the ground-truth refund-ledger delta in `adversary/evals/judges.py`.
-4. **Reporter** (`adversary/agents/reporter.py`) — Gemini 3 Pro. Writes the campaign's Markdown security report at end-of-run.
+1. **Strategist** (`adversary/agents/strategist.py`) — Gemini 2.5 Pro. The only agent with tools: the Phoenix MCP toolset. Its prompt forces it to consult its own past traces before choosing a technique.
+2. **Attacker** (`adversary/agents/attacker.py`) — Gemini 2.5 Flash, no tools. A pure text generator that turns `(class, technique, goal)` into a concrete payload. No tools = no side channel = auditable.
+3. **Analyst** (`adversary/agents/analyst.py`) — Gemini 2.5 Pro. Reads the target's output and produces a `{verdict, evidence}` JSON. Fused with the ground-truth refund-ledger delta in `adversary/evals/judges.py`.
+4. **Reporter** (`adversary/agents/reporter.py`) — Gemini 2.5 Pro. Writes the campaign's Markdown security report at end-of-run.
 
 The loop, in pseudocode:
 

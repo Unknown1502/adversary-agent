@@ -10,14 +10,13 @@
 .env.*
 !.env.example
 
-# Frontend isn't built into the API container.
-frontend/
-*.tsx
-*.ts
-next.config.mjs
-package.json
-package-lock.json
-tsconfig.json
+# Frontend source IS needed: the multi-stage Dockerfile builds the Next.js
+# console (stage 1) and FastAPI serves it from the same container. We only
+# exclude the heavy/build-output dirs (handled below + via .gitignore:
+# node_modules/, .next/, out/), not the source.
+frontend/node_modules/
+frontend/.next/
+frontend/out/
 
 # Tests, docs, scripts that don't run in production.
 tests/

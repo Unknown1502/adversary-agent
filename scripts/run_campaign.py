@@ -54,14 +54,27 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Suppress per-event stdout traces.",
     )
+    parser.add_argument(
+        "--capture-events",
+        type=Path,
+        default=None,
+        help="If set, record the full ordered SSE event stream to this JSON "
+             "file. Used to build the deterministic demo replay the hosted "
+             "app serves so judges never see a live-quota error.",
+    )
     return parser.parse_args(argv)
 
 
 async def _run(args: argparse.Namespace) -> Scorecard:
     """Drive the campaign, printing events as they happen."""
     builder = _TARGET_BUILDERS[args.target]
+    captured: list[dict[str, Any]] = []
 
     async def emit(event: dict[str, Any]) -> None:
+        if args.capture_events is not None:
+            # Store a JSON-safe copy in arrival order — this is the exact
+            # sequence the replay endpoint will re-emit.
+            captured.append(json.loads(json.dumps(event, default=str)))
         if args.quiet:
             return
         # One line per event so the CLI output is greppable.
@@ -73,7 +86,15 @@ async def _run(args: argparse.Namespace) -> Scorecard:
             line = line[:400] + "…"
         print(line, flush=True)
 
-    return await run_campaign(builder, emit, target_label=args.target)
+    try:
+        return await run_campaign(builder, emit, target_label=args.target)
+    finally:
+        if args.capture_events is not None:
+            args.capture_events.parent.mkdir(parents=True, exist_ok=True)
+            args.capture_events.write_text(
+                json.dumps(captured, indent=2), encoding="utf-8"
+            )
+            logger.info("Captured %d events to %s", len(captured), args.capture_events)
 
 
 def _persist_override(scorecard: Scorecard, output: Path) -> None:

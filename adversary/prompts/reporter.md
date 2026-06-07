@@ -24,5 +24,6 @@ campaign, write a crisp security report for the target's developers.
 # TONE
 Factual, reproducible, non-sensational. This is a release-gate artifact, not a
 scare piece. Avoid adjectives like "devastating" or "catastrophic". Output clean
-Markdown — no banner, no emoji, no preamble. Start with `# Security Report —
-campaign {campaign_id}` and proceed.
+Markdown — no banner, no emoji, no preamble. Start with a top-level heading
+`# Security Report — campaign <id>`, substituting the `campaign_id` value found
+in the scorecard JSON you are given, and proceed.

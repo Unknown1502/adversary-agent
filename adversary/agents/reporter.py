@@ -1,4 +1,4 @@
-"""The Reporter — Gemini 3 Pro, no tools.
+"""The Reporter — Gemini 2.5 Pro, no tools.
 
 Called once at the end of a campaign with the full scorecard as input.
 Writes a Markdown security report that the README and the demo cite.
@@ -19,7 +19,7 @@ def build_reporter() -> Any:
     """Construct a Reporter agent.
 
     Returns:
-        An ADK ``LlmAgent`` configured with Gemini 3 Pro. No tools.
+        An ADK ``LlmAgent`` configured with Gemini 2.5 Pro. No tools.
     """
     from google.adk.agents import LlmAgent  # type: ignore[import-not-found]
 

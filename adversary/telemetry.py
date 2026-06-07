@@ -43,20 +43,42 @@ def init_telemetry(project_name: str | None = None) -> Any:
         return None
 
     project = project_name or config.PHOENIX_PROJECT
+    trace_endpoint = _otlp_traces_endpoint(config.PHOENIX_ENDPOINT)
     try:
         _TRACER_PROVIDER = register(
             project_name=project,
-            endpoint=config.PHOENIX_ENDPOINT,
+            endpoint=trace_endpoint,
+            protocol="http/protobuf",
+            api_key=config.PHOENIX_API_KEY or None,
+            batch=True,
+            set_global_tracer_provider=True,
             auto_instrument=False,
+            verbose=False,
         )
         logger.info("Phoenix telemetry registered (project=%s endpoint=%s)",
-                    project, config.PHOENIX_ENDPOINT)
+                    project, trace_endpoint)
     except Exception as exc:  # broad: registration failure must not crash
         logger.error("Phoenix register() failed: %s. Tracing disabled.", exc)
         return None
 
     _install_instrumentors(_TRACER_PROVIDER)
     return _TRACER_PROVIDER
+
+
+def _otlp_traces_endpoint(base: str) -> str:
+    """Return the OTLP HTTP traces URL for a Phoenix collector base.
+
+    Phoenix Cloud gives you a *space* URL like
+    ``https://app.phoenix.arize.com/s/<space>``. The OTLP/HTTP protobuf
+    exporter must POST to the ``/v1/traces`` sub-path; if it isn't present
+    the exporter's protocol inference fails ("defaulting to HTTP") and the
+    collector answers ``405 Method Not Allowed``, which previously aborted
+    whole campaigns. We append it idempotently.
+    """
+    trimmed = base.rstrip("/")
+    if trimmed.endswith("/v1/traces"):
+        return trimmed
+    return f"{trimmed}/v1/traces"
 
 
 def _set_phoenix_auth_env() -> None:

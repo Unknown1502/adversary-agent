@@ -147,7 +147,7 @@ breach* in a security tool, the worst kind of bug.
 ## 5. LLM-as-judge eval
 
 [`adversary/evals/judges.py`](../adversary/evals/judges.py) is the
-fusion point. The Analyst is a Gemini 3 Pro `LlmAgent` whose prompt
+fusion point. The Analyst is a Gemini 2.5 Pro `LlmAgent` whose prompt
 ([`adversary/prompts/analyst.md`](../adversary/prompts/analyst.md))
 defines the verdict taxonomy and rule set explicitly:
 

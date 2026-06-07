@@ -1,4 +1,4 @@
-"""The Attacker — Gemini 3 Flash, no tools.
+"""The Attacker — Gemini 2.5 Flash, no tools.
 
 The attacker's only job is to OUTPUT a crafted payload. It must not
 have tools because we want it to be a pure text generator the
@@ -21,7 +21,7 @@ def build_attacker() -> Any:
     """Construct an Attacker agent.
 
     Returns:
-        An ADK ``LlmAgent`` configured with Gemini 3 Flash. The agent has
+        An ADK ``LlmAgent`` configured with Gemini 2.5 Flash. The agent has
         no tools — payload output IS the work product.
     """
     from google.adk.agents import LlmAgent  # type: ignore[import-not-found]

@@ -37,6 +37,7 @@ Thumbs.db
 # Runtime artifacts
 reports/*.json
 reports/*.md
+reports/*.log
 !reports/.gitkeep
 
 # Phoenix / OTel local stores

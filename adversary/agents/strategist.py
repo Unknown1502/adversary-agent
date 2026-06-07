@@ -1,4 +1,4 @@
-"""The Strategist — Gemini 3 Pro with the Phoenix MCP toolset.
+"""The Strategist — Gemini 2.5 Pro with the Phoenix MCP toolset.
 
 This is the only agent in the system with tools other than its prompt.
 It calls Phoenix MCP to introspect its own past traces and adapts the
@@ -26,7 +26,7 @@ def build_strategist() -> Any:
     using the escalation ladder in :data:`AttackClass.techniques`.
 
     Returns:
-        An ADK ``LlmAgent`` configured with Gemini 3 Pro.
+        An ADK ``LlmAgent`` configured with Gemini 2.5 Pro.
     """
     from google.adk.agents import LlmAgent  # type: ignore[import-not-found]
 

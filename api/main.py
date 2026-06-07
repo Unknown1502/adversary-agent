@@ -30,6 +30,7 @@ from sse_starlette.sse import EventSourceResponse
 from adversary import config
 from adversary.orchestrator import run_campaign
 from adversary.scorecard import Scorecard, regression_diff
+from api.replay import replay_available, replay_events
 from target.patched_agent import build_patched_agent
 from target.support_agent import build_target_agent
 
@@ -83,9 +84,15 @@ def _resolve_builder(label: str) -> Any:
 
 # --- Endpoints ----------------------------------------------------------
 
+@app.get("/health")
 @app.get("/healthz")
 async def healthz() -> dict[str, Any]:
-    """Cloud Run liveness probe. Returns config warnings for visibility."""
+    """Liveness/readiness probe. Returns config warnings for visibility.
+
+    Exposed at both ``/health`` and ``/healthz``: Cloud Run's edge reserves
+    and intercepts ``/healthz`` before it reaches the container, so ``/health``
+    is the one that is actually reachable through the public URL.
+    """
     return {
         "status": "ok",
         "version": "0.1.0",
@@ -99,11 +106,36 @@ _SENTINEL: dict[str, Any] = {"type": "__end__"}
 @app.get("/campaign/stream")
 async def campaign_stream(
     target: str = Query("vulnerable", description="vulnerable | patched"),
+    replay: bool | None = Query(
+        None,
+        description="Replay the captured demo stream instead of running live. "
+        "Defaults to the DEMO_MODE env setting. Guarantees a flawless run on "
+        "a quota-limited project; set false to run a real live campaign.",
+    ),
+    speed: float = Query(1.0, description="Replay speed multiplier (0.1–10)."),
 ) -> EventSourceResponse:
-    """Start a campaign and stream events as SSE."""
+    """Start a campaign and stream events as SSE (live or deterministic replay)."""
+    use_replay = config.DEMO_MODE if replay is None else replay
+    if use_replay and replay_available():
+        return EventSourceResponse(_replay_stream(speed))
     builder = _resolve_builder(target)
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     return EventSourceResponse(_stream_events(target, builder, queue))
+
+
+async def _replay_stream(speed: float) -> Any:
+    """Adapt the captured replay generator to the SSE ``{"data": ...}`` shape,
+    and cache the final scorecard so /report and /report/regression work too."""
+    async for event in replay_events(speed=speed):
+        if event.get("type") == "campaign_done":
+            sc = event.get("scorecard") or {}
+            label = sc.get("target_label", "vulnerable")
+            _LAST[label] = Scorecard(
+                campaign_id=sc.get("campaign_id", "replay"),
+                target_label=label,
+                rows=list(sc.get("rows", [])),
+            )
+        yield {"data": json.dumps(event)}
 
 
 async def _stream_events(target: str, builder: Any, queue: asyncio.Queue) -> Any:
@@ -190,3 +222,61 @@ async def _on_startup() -> None:
     """
     for warning in config.validate():
         logger.warning("config: %s", warning)
+
+
+# --- Static frontend ----------------------------------------------------
+# When the Next.js console has been exported to static files (the container
+# build does this), serve it from the same Cloud Run service so the whole
+# project lives behind one URL.
+#
+# We deliberately do NOT use a greedy ``app.mount("/", StaticFiles(html=True))``:
+# that mount issues 307 redirects for directory-style paths, which hijacks API
+# routes like ``/healthz`` (redirecting to ``/healthz/`` → 404). Instead we
+# mount only the Next.js asset dir at ``/_next`` and add a single catch-all
+# that serves a matching static file if one exists, else falls back to
+# ``index.html`` (SPA behaviour). The JSON/SSE routes defined above always win
+# because they are registered before this catch-all.
+def _mount_frontend() -> None:
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.staticfiles import StaticFiles
+
+    # Container copies the export to /app/frontend_out; locally it's the
+    # sibling frontend/out/ next to the repo root.
+    candidates = [
+        Path("/app/frontend_out"),
+        Path(__file__).resolve().parent.parent / "frontend" / "out",
+    ]
+    static_dir = next((p for p in candidates if p.is_dir()), None)
+    if static_dir is None:
+        logger.info("No static frontend export found; serving API only.")
+        return
+
+    # Hashed JS/CSS bundles — safe to mount greedily, they never collide with
+    # API routes (all live under /_next/...).
+    next_assets = static_dir / "_next"
+    if next_assets.is_dir():
+        app.mount(
+            "/_next",
+            StaticFiles(directory=str(next_assets)),
+            name="next-assets",
+        )
+
+    index_html = static_dir / "index.html"
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def _spa(full_path: str) -> Any:
+        # Try an exact static file first (e.g. favicon.ico, index.txt).
+        candidate = (static_dir / full_path).resolve()
+        if static_dir.resolve() in candidate.parents and candidate.is_file():
+            return FileResponse(candidate)
+        # Otherwise serve the SPA shell so client-side routing works.
+        if index_html.is_file():
+            return FileResponse(index_html)
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    logger.info("Serving static frontend from %s", static_dir)
+
+
+_mount_frontend()

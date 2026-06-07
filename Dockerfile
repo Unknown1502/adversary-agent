@@ -6,7 +6,21 @@
 # The canonical copy lives at ``deploy/Dockerfile`` (per spec §2 file
 # tree). This root file mirrors it so the deploy path stays one-command.
 # Keep them in sync.
+#
+# Two stages: (1) build the Next.js console to static files, (2) the Python
+# runtime that serves both the FastAPI API and those static files from one
+# Cloud Run service — one URL for the whole project.
 
+# --- Stage 1: build the static frontend ---------------------------------
+FROM node:20-slim AS frontend
+WORKDIR /fe
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci || npm install
+COPY frontend/ ./
+# `output: "export"` in next.config.mjs emits a static site to /fe/out.
+RUN npm run build
+
+# --- Stage 2: Python runtime --------------------------------------------
 FROM python:3.12-slim
 
 RUN apt-get update \
@@ -32,6 +46,9 @@ COPY target ./target
 COPY api ./api
 COPY scripts ./scripts
 COPY pyproject.toml README.md LICENSE ./
+
+# Static console built in stage 1. api/main.py mounts this at "/".
+COPY --from=frontend /fe/out ./frontend_out
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
